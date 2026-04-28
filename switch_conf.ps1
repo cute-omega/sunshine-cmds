@@ -1,14 +1,14 @@
 param(
-    [string]$GPU="", # GPU名称，通过dxgi-info获取，如"AMD Radeon 780M Graphics"
+    [string]$GPU = "", # GPU名称，通过dxgi-info获取，如"AMD Radeon 780M Graphics"
 
-    [string]$Output="", # 显示器，通过dxgi-info获取，如"ZakoHDR"
+    [string]$Output = "", # 显示器，通过dxgi-info获取，如"ZakoHDR"
     
     <#
     投影模式，覆盖DisplayDevicePrep参数
     Work - 办公场景，扩展屏幕，覆盖DisplayDevicePrep参数值为ensure_active
     Game - 游戏场景，仅第二屏幕，覆盖DisplayDevicePrep参数值为ensure_only_display
     #>
-    [string]$Scene="Game",
+    [string]$Scene = "Game",
 
     <#
     串流时显示器组合状态设定
@@ -17,13 +17,13 @@ param(
     ensure_primary - 自动激活指定显示器并设置为主显示器
     ensure_only_display - 禁用其他显示器，只启用指定显示器
     #>
-    [string]$DisplayDevicePrep="ensure_active",
+    [string]$DisplayDevicePrep = "ensure_active",
 
-    [string]$HostName=$env:COMPUTERNAME # 主机名称
+    [string]$HostName = $env:COMPUTERNAME # 主机名称
 )
 
 # 检查是否有管理员权限
-function Check-IsElevated {
+function Test-IsElevated {
     $id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
     $p = New-Object System.Security.Principal.WindowsPrincipal($id)
     if ($p.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator))
@@ -53,23 +53,25 @@ function Reset-Display-Device-Persistence {
 # 获取配置文件
 function Get-Conf {
     param(
-        [string]$SunshineName=$env:COMPUTERNAME, # Sunshine 主机名称
-        [string]$AdapterName="", # 适配器名称，如"AMD Radeon 780M Graphics"
-        [string]$OutputName="", # 输出显示器指定，如"ZakoHDR"
+        [string]$SunshineName = $env:COMPUTERNAME, # Sunshine 主机名称
+        [string]$AdapterName = "", # 适配器名称，如"AMD Radeon 780M Graphics"
+        [string]$OutputName = "", # 输出显示器指定，如"ZakoHDR"
 
         <#
         最低 CPU 线程数
         提高该值会略微降低编码效率，但为了获得更多的 CPU 内核用于编码，
         通常是值得的。理想值是在您的硬件配置上以所需的串流设置进行可靠编码的最低值。
         #>
-        [int]$MinThreads=2,
+        [int]$MinThreads = 2,
 
         <#
         FEC (前向纠错) 参数
         每个视频帧中的错误纠正数据包百分比。
         较高的值可纠正更多的网络数据包丢失，但代价是增加带宽使用量。
+        依据https://github.com/AlkaidLab/foundation-sunshine/issues/395 ，
+        串流卡顿/提示“连接过慢”时可尝试将FEC提升为60
         #>
-        [int]$FECPercentage=20,
+        [int]$FECPercentage = 20,
 
         <#
         串流时显示器组合状态设定
@@ -78,7 +80,7 @@ function Get-Conf {
         ensure_primary - 自动激活指定显示器并设置为主显示器
         ensure_only_display - 禁用其他显示器，只启用指定显示器
         #>
-        [string]$DisplayDevicePrep="ensure_active",
+        [string]$DisplayDevicePrep = "ensure_active",
 
         <#
         HEVC 支持
@@ -87,7 +89,7 @@ function Get-Conf {
         2 - Sunshine 将通告 HEVC Main 配置支持
         3 - Sunshine 将通告 HEVC Main 和 Main10 (HDR) 配置支持
         #>
-        [int]$HEVCMode=0
+        [int]$HEVCMode = 0
     )
 
     $Conf = @"
@@ -103,26 +105,12 @@ resolutions = [
     2560x1440,
     2560x1600,
     3440x1440,
-    1920x1200,
     3840x2160,
-    3840x1600,
-    2316x1080,
-    2388x1668,
-    2480x1116,
-    2670x1200,
-    2800x1260,
-    2880x1920,
-    3200x1440,
-    5120x2880,
-    7680x4320,
-    2400x1080,
-    2310x1080,
-    2736x1824,
     1800x1200
 ]
 address_family = both
 locale = zh
-fps = [30,60,90,120]
+fps = [30,60,90,120, 144]
 wan_encryption_mode = 0
 min_threads = $MinThreads
 "@
@@ -145,7 +133,8 @@ function Switch-Mode {
     $DisplayDevicePrep = "ensure_active"
     if ($Scene -eq "Work") {
         $DisplayDevicePrep = "ensure_active"
-    } elseif ($Scene -eq "Game") {
+    }
+    elseif ($Scene -eq "Game") {
         $DisplayDevicePrep = "ensure_only_display"
     }
 
@@ -165,7 +154,7 @@ function Switch-Mode {
         -AdapterName $GPU `
         -OutputName $Output `
         -DisplayDevicePrep $DisplayDevicePrep `
-        | Out-File "$ConfigFile" -Encoding utf8
+    | Out-File "$ConfigFile" -Encoding utf8
 
     Write-Output "重启Sunshine服务"
     # 重启 Sunshine
@@ -178,10 +167,10 @@ function Switch-Mode {
 }
 
 # 提权运行
-if (-not(Check-IsElevated)) { 
+if (-not(Test-IsElevated)) { 
     $ScriptPath = $MyInvocation.MyCommand.Path
-    $ScriptArgsString =  ($MyInvocation.BoundParameters.Keys | ForEach-Object {
-     "-{0} `"{1}`"" -f  $_ ,$MyInvocation.BoundParameters[$_]} ) -join " "
+    $ScriptArgsString = ($MyInvocation.BoundParameters.Keys | ForEach-Object {
+            "-{0} `"{1}`"" -f $_ , $MyInvocation.BoundParameters[$_] } ) -join " "
     Start-Process powershell -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`" $ScriptArgsString"
 }
 else {
